@@ -27,18 +27,26 @@ close all
 
 % *************** TO-DO *********************
 % CHANGE THESE INPUTS
-start_path = 'D:\PractiseDirectory\OAfeeding\4214_39';
+start_path = 'D:\PractiseDirectory\FeedingTaskAnalysis\tDCS_P02';
 %filename = uigetfile(start_path);
-filename = '4214_39_NP_L1.exp';
-subid = '4214_39';  % '4214_xx'
-session = 'NP';     % 'NP' or 'FU'
+filename = 'tDCS_P02_FU0002.exp';
+subid = 'tDCS_P02';  % '4214_xx'
+session = 'FU';     % 'NP' or 'FU'
 hand = 'L';         % 'L' or 'R'
-trial = 1;          % number
+trial = 2;          % number
 
 % ---- If there's an error in the code, increase grace_d
 % Change grace_d to identify 15-16 boundaries when spoon is leaving cup
 % Change by .005
 grace_d = 0.035; % included to account for cups moving from the origin. 
+
+% ---- If the last end of transport doesn't seem right, change grace_span
+% grace_span is defaulted at 1, meaning that the maximum time difference
+% between last transport end and start should be less than or equal to the 
+% maximum difference in the earier 14 trials. But it might not always be
+% true. So check the figure and change the grace_span accordingly. 
+% When grace_span is too big, there'll be an error. 
+grace_span = 1.0;    %
 vel_threshold = 0.03;
 % analysis parameters
 fc = 8; % cutoff freq
@@ -112,21 +120,6 @@ for i = 2:15
     idx_startofreach(i) = pot_idx(end) + idx_CupBoudary(i-1) - 1;
 end
 
-% peak velocity -----------------------
-idx_peak = zeros(15,1);
-PeakVelocity = zeros(15,1);
-% 1. First 14 reaches
-for i = 1:14
-    [PeakVelocity(i), idx_peak(i)] = max(v_filtered( idx_startofreach(i):idx_startofreach(i+1) ));
-    idx_peak(i) = idx_peak(i) + idx_startofreach(i) - 1;
-end
-% 2. The last peak (during reach, not the largest peak at the end)
-% So figure out the largest start-to-peak time, in general
-% the movements would be at a similar rate, so limit the search to that.
-maxspan = max(idx_peak - idx_startofreach);
-[PeakVelocity(15), idx_peak(15)] = max( v_filtered(idx_startofreach(15): idx_startofreach(15)+maxspan));
-idx_peak(15) = idx_peak(15) + idx_startofreach(15) - 1;
-
 % End of transport -------------------
 % defined as the time of bean drop
 % When the y position is maximum.
@@ -138,10 +131,27 @@ for i = 1:14
     idx_endoftransport(i) = idx_endoftransport(i) + idx_startofreach(i) - 1;
 end
 % 2. The last peak (same consideration with peak velocity)
-% So figure out the largest start-to-peak time, 
-% Use double the max span to find it.
-[pk_ypos(15), idx_endoftransport(15)] = max( pos_matrix(idx_startofreach(15): idx_startofreach(15)+ 2*maxspan, 2));
+% So figure out the largest start-to-end time, 
+% Use the max span to find the last peak in y-pos.
+maxspan2 = max(idx_endoftransport - idx_startofreach);
+[pk_ypos(15), idx_endoftransport(15)] = max( pos_matrix(idx_startofreach(15): idx_startofreach(15)+ grace_span * maxspan2, 2));
 idx_endoftransport(15) = idx_endoftransport(15) + idx_startofreach(15) - 1;
+
+
+% peak velocity -----------------------
+idx_peak = zeros(15,1);
+PeakVelocity = zeros(15,1);
+for i = 1:15
+    [PeakVelocity(i), idx_peak(i)] = max(v_filtered( idx_startofreach(i):idx_endoftransport(i) ));
+    idx_peak(i) = idx_peak(i) + idx_startofreach(i) - 1;
+end
+% old codes commented
+% 2. The last peak (during reach, not the largest peak at the end)
+% So figure out the largest start-to-peak time, in general
+% the movements would be at a similar rate, so limit the search to that.
+% maxspan = max(idx_peak - idx_startofreach);
+% [PeakVelocity(15), idx_peak(15)] = max( v_filtered(idx_startofreach(15): idx_startofreach(15)+maxspan));
+% idx_peak(15) = idx_peak(15) + idx_startofreach(15) - 1;
 
 % End of reach/repetition -----------
 % Will only be 14 of these, since no one completed the last trip back home.
@@ -181,18 +191,20 @@ legend('velocity profile', 'Is\_In\_HomeCup', ...
 subplot(3,1,2)
 plot(t, pos_matrix(:,2))
 hold on
+plot(t(idx_peak), pos_matrix(idx_peak,2), '*', 'color','black')
 plot(t(idx_endoftransport), pos_matrix(idx_endoftransport,2), 's','MarkerFaceColor','m', 'MarkerEdgeColor', 'b')
+plot(t(idx_scoopstart),pos_matrix(idx_scoopstart,2), '<', 'MarkerFaceColor','y', 'MarkerEdgeColor', 'b')
 ylim([-1.5 1.5])
 title('Y pos vs time')
-legend('y position', 'End of Transport',...
-    'Location','southeastoutside')
+legend('y position','Peak Velocity', 'End of Transport',...
+    'Start of a new scoop','Location','southeastoutside')
 subplot(3,1,3)
 plot(t, vel_matrix(:,3))
 hold on
 plot(t(idx_scoopstart),vel_matrix(idx_scoopstart,3), '<', 'MarkerFaceColor','y', 'MarkerEdgeColor', 'b')
 ylim([-1.5 1.5])
 title('Z vel vs time')
-legend('z velocity', 'End of Reach', ...
+legend('z velocity', 'Start of a new scoop', ...
     'Location','southeastoutside')
 
 %% Calculate dependent variables for each reach, and trial time

@@ -1,10 +1,9 @@
 % Left panel hand trajectory, right panel resultant velocity
-close all
 
 % not gonna play the whole thing
-TIME_RATIO = 0.8;
+TIME_RATIO = 1;
 % Play every other frame to set video speed to 2x real speed
-indices = 500:4:TIME_RATIO*length(t);
+indices = 1:4:TIME_RATIO*length(t);
 
 figure
 subplot(1,2,1)
@@ -12,7 +11,7 @@ plot(pos_matrix(indices,1),pos_matrix(indices,2))
 subplot(1,2,2)
 plot(t(indices),v_filtered(indices))
 
-%% Make animation
+%% Make animation or simply just show the trajectories to visualize
 
 f = figure
 f.Position = [360.3333 197.6667 560*1.5 210*1.5]
@@ -27,7 +26,7 @@ v_vel = v_filtered(:);
 
 % Set limits before the loop to avoid re-calculating 
 sub1 = subplot(1,2,1);
-axis([-0.3 0.19 -0.03 0.2])
+axis([-0.4 0.19 -0.03 0.2])
 sub1.Position = [0.1,0.2,0.35,0.60];
 sub1.Color = 'none';
 sub1.XColor = 'none'
@@ -36,7 +35,7 @@ title(sub1,'Hand Trajectory')
 a_task = animatedline('Color','black','LineWidth',2);
 
 sub2 = subplot(1,2,2);
-axis([2 50 -1.2 0.8])
+axis([0 t(end) -1.5 0.8])
 sub2.Position = [0.5,0.2,0.48,0.60];
 sub2.Color = 'none';
 %sub2.XColor = 'none'
@@ -61,21 +60,21 @@ for k = 1:length(indices)
     drawnow 
     
 %{ ---------- STRAIGHT TO GIF -------------
-%    Capture the plot as an image 
-    frame = getframe(f); 
-    im = frame2im(frame); 
-    [imind,cm] = rgb2ind(im,256); 
-    % Write to the GIF File 
-    if k == 1 
-    imwrite(imind,cm,'feed1.gif','gif', 'Loopcount',inf, 'DelayTime',0.01);
-    cnt = cnt + 1;
-    elseif cnt == 10
-            imwrite(imind,cm,'feed1.gif','gif','WriteMode','append','DelayTime',0.01); 
-            cnt = 0; 
-    else
-        cnt = cnt + 1;
-    end
-%         
+% %    Capture the plot as an image 
+%     frame = getframe(f); 
+%     im = frame2im(frame); 
+%     [imind,cm] = rgb2ind(im,256); 
+%     % Write to the GIF File 
+%     if k == 1 
+%     imwrite(imind,cm,'feed1.gif','gif', 'Loopcount',inf, 'DelayTime',0.01);
+%     cnt = cnt + 1;
+%     elseif cnt == 10
+%             imwrite(imind,cm,'feed1.gif','gif','WriteMode','append','DelayTime',0.01); 
+%             cnt = 0; 
+%     else
+%         cnt = cnt + 1;
+%     end
+% %         
 %} -----------
      
     % ---------- Save in frames to be used in .avi------------

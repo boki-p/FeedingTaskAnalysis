@@ -26,25 +26,26 @@ clear all
 close all
 
 % *************** TO-DO *********************
-% CHANGE THESE INPUTS
+% FILE RELATED INPUT
 start_path = 'C:\Boki\PracticeDirectory\FeedingTaskAnalysis';
 %filename = uigetfile(start_path);
-filename = '4214_37_NP_L1.exp';
-subid = '4214_37';  % '4214_xx' or 'tDCS_Pxx'
+filename = '4214_44_NP_R1.exp';
+subid = '4214_44';  % '4214_xx' or 'tDCS_Pxx'
 session = 'NP';     % 'NP' or 'FU'
-hand = 'L';         % 'L' or 'R'
+hand = 'R';         % 'L' or 'R'
 trial = 1;          % number
 
-% ---- If participants did extra repetitions ----
-% n_reps is defaulted to be 15. But change based on what they did
-% Then delete measures of the errornous reach manually. But keep the rep
-% num as is there are 15
+% TRIAL RELATED INPUTS
+% n_reps is defaulted to be 15. 
 n_reps = 15;
-
+% v_end_threshold and vel_threshold is used to decide the start and end of
+% each repetition. A 
+v_end_threshold = 0.15;
+vel_threshold = 0.04;
 % ---- If there's an error in the code, increase grace_d
 % Change grace_d to identify 15-16 boundaries when spoon is leaving cup
 % Change by .005
-grace_d = 0.035; % included to account for cups moving from the origin. 
+grace_d = 0.05; % included to account for cups moving from the origin. 
 
 % ---- If the last end of transport doesn't seem right, change grace_span
 % grace_span is defaulted at 1, meaning that the maximum time difference
@@ -52,8 +53,7 @@ grace_d = 0.035; % included to account for cups moving from the origin.
 % maximum difference in the earier 14 trials. But it might not always be
 % true. So check the figure and change the grace_span accordingly. 
 % When grace_span is too big, there'll be an error. 
-grace_span = 1.0;    %
-vel_threshold = 0.03;
+grace_span = 0.7;    %
 % analysis parameters
 fc = 8; % cutoff freq
 % *************** TO-DO END *********************
@@ -71,7 +71,7 @@ CUP_D = 0.095;
 % get variables
 % {'pos_x','pos_y','pos_z','vel_x','vel_y','vel_z','acc_x','acc_y','acc_z',}
 % column number should be 2:10 by default. 
-raw_data = A.data(:, 3:11);
+raw_data = A.data(:, 2:10);
 % filter data
 filtered_data = ApplyFilter(raw_data, fc);
 % get position, velocity and acceleration data
@@ -89,7 +89,7 @@ v_vec = sqrt( vel_matrix(:,1).*vel_matrix(:,1)...
     + vel_matrix(:,2).*vel_matrix(:,2) + vel_matrix(:,3).*vel_matrix(:,3) );
 sign_vec = vel_matrix(:,2)./abs( vel_matrix(:,2) );
 v_res = v_vec.*sign_vec;
-v_filtered = ApplyFilter(v_res, fc);
+v_res = ApplyFilter(v_res, fc);
 
 dt = 1/F_SAMPLING;
 tmax = dt*length(filtered_data(:,1));
@@ -119,12 +119,12 @@ idx_CupBoudary = find(If_Is_Boundary == 1);
 %   work backwards to find reach start which v <= 0.03m/s
 % 1. 1st reach
 idx_startofreach = zeros(n_reps,1);
-pot_idx = find( v_filtered( 1:idx_CupBoudary(1)) <= .03 );   % all potential indices
-idx_startofreach(1) = pot_idx(end);
+pot_startidx = find( abs(v_res( 1:idx_CupBoudary(1))) <= vel_threshold );   % all potential indices
+idx_startofreach(1) = pot_startidx(end);
 % 2. All other 14 reaches
 for i = 2:n_reps
-    pot_idx = find( v_filtered( idx_CupBoudary(i-1):idx_CupBoudary(i) ) <= .03 );   
-    idx_startofreach(i) = pot_idx(end) + idx_CupBoudary(i-1) - 1;
+    pot_startidx = find( abs(v_res( idx_CupBoudary(i-1):idx_CupBoudary(i) )) <= vel_threshold );   
+    idx_startofreach(i) = pot_startidx(end) + idx_CupBoudary(i-1) - 1;
 end
 
 % End of transport -------------------
@@ -141,7 +141,7 @@ end
 % So figure out the largest start-to-end time, 
 % Use the max span to find the last peak in y-pos.
 maxspan2 = max(idx_endoftransport - idx_startofreach);
-[pk_ypos(n_reps), idx_endoftransport(n_reps)] = max( pos_matrix(idx_startofreach(n_reps): idx_startofreach(n_reps)+ grace_span * maxspan2, 2));
+[pk_ypos(n_reps), idx_endoftransport(n_reps)] = max( pos_matrix(idx_startofreach(n_reps): (idx_startofreach(n_reps)+ grace_span * maxspan2), 2));
 idx_endoftransport(n_reps) = idx_endoftransport(n_reps) + idx_startofreach(n_reps) - 1;
 
 
@@ -149,7 +149,7 @@ idx_endoftransport(n_reps) = idx_endoftransport(n_reps) + idx_startofreach(n_rep
 idx_peak = zeros(n_reps,1);
 PeakVelocity = zeros(n_reps,1);
 for i = 1:n_reps
-    [PeakVelocity(i), idx_peak(i)] = max(v_filtered( idx_startofreach(i):idx_endoftransport(i) ));
+    [PeakVelocity(i), idx_peak(i)] = max(v_res( idx_startofreach(i):idx_endoftransport(i) ));
     idx_peak(i) = idx_peak(i) + idx_startofreach(i) - 1;
 end
 % old codes commented
@@ -163,33 +163,36 @@ end
 % End of reach/repetition -----------
 % Will only be 14 of these, since no one completed the last trip back home.
 % When z velocity first changes sign from negative to positive Is_In_HomeCup 
+% Added later: Also when resultant velocity falls beyond 0,03 m/s.
 idx_endofreach = zeros(n_reps-1,1);
 Is_Vz_Neg = ( vel_matrix(:,3) <= 0);
 If_Vz_Flips = ~Is_Vz_Neg & [0; Is_Vz_Neg(1:end-1)];
-Is_pot_end = If_Vz_Flips & Is_In_HomeCup;
+If_V_IsLow = ( abs(v_res) <= v_end_threshold );   
+Is_pot_end = If_Vz_Flips & Is_In_HomeCup & If_V_IsLow;
+
 for i = 1:(n_reps -1)
     % Use boundary markers here because it's more accurate
-    pot_idx = find( Is_pot_end( idx_CupBoudary(i):idx_CupBoudary(i+1) ) == 1 );   
-    idx_endofreach(i) = pot_idx(1) + idx_CupBoudary(i) - 1;
+    pot_startidx = find( Is_pot_end( idx_CupBoudary(i):idx_CupBoudary(i+1) ) == 1 );   
+    idx_endofreach(i) = pot_startidx(1) + idx_CupBoudary(i) - 1;
 end
 
 % End of reach is also the start of a new scoop.
 %   Identify the first time the spoon get in the cup 
-pot_idx = find( Is_pot_end == 1 );   
-idx_firsttimeincup = pot_idx(1);
+pot_startidx = find( Is_pot_end == 1 );   
+idx_firsttimeincup = pot_startidx(1);
 idx_scoopstart = [idx_firsttimeincup; idx_endofreach];
 
 % Plot out to check
 figure 
 subplot(3,1,1)
-plot(t, v_filtered)
+plot(t, v_res)
 hold on
 plot(t, Is_In_HomeCup)
 ylim([-1.5 1.5])
-plot(t(idx_startofreach), v_filtered(idx_startofreach), '>', 'MarkerFaceColor', 'y', 'MarkerEdgeColor', 'b')
-plot(t(idx_peak), PeakVelocity, '*', 'color','black')
-plot(t(idx_endoftransport), v_filtered(idx_endoftransport), 's','MarkerFaceColor','m', 'MarkerEdgeColor', 'b')
-plot(t(idx_scoopstart),v_filtered(idx_scoopstart), '<', 'MarkerFaceColor','y', 'MarkerEdgeColor', 'b')
+plot(t(idx_startofreach), v_res(idx_startofreach), '>', 'MarkerFaceColor', 'y', 'MarkerEdgeColor', 'b')
+plot(t(idx_peak), v_res(idx_peak), '*', 'color','black')
+plot(t(idx_endoftransport), v_res(idx_endoftransport), 's','MarkerFaceColor','m', 'MarkerEdgeColor', 'b')
+plot(t(idx_scoopstart),v_res(idx_scoopstart), '<', 'MarkerFaceColor','y', 'MarkerEdgeColor', 'b')
 title('Resultant Velocity')
 legend('velocity profile', 'Is\_In\_HomeCup', ...
     'Start of reach', 'Peak Velocity',  ...
@@ -219,7 +222,6 @@ legend('z velocity',  ...
     'Start of reach', 'Peak Velocity',  ...
     'End of transport','Start of a new scoop','Location','southeastoutside')
 
-
 %% Calculate dependent variables for each reach, and trial time
 % Inter reah interval; accumulative distance within cup; transport time
 
@@ -227,12 +229,14 @@ legend('z velocity',  ...
 TransportTime =  idx_endoftransport - idx_startofreach;
 TransportTime = TransportTime * dt;
 
-% Accumulative distance within cup and IRI
+% Accumulative distance within, bewteen cup and IRI
 %   t from start of scooping to start of reach
 DistanceInCup = zeros(n_reps,1);
 DwellTime = zeros(n_reps,1);
+DistanceBtwCup = zeros(n_reps,1);
 
 for i = 1:n_reps
+    % Dis in cup
     temp_posmatrix = pos_matrix( idx_scoopstart(i):idx_startofreach(i) ,:);
     d = 0; % accumulative distance for the ith reach
     for j = 1:length(temp_posmatrix) - 1
@@ -242,6 +246,16 @@ for i = 1:n_reps
     end
     DistanceInCup(i) = d;
     DwellTime(i) = (idx_startofreach(i) - idx_scoopstart(i)) * dt;
+    
+    % Dis btw cups
+    temp_posmatrix = pos_matrix( idx_startofreach(i):idx_endoftransport(i),:);
+    d = 0; % accumulative distance for the ith reach
+    for j = 1:length(temp_posmatrix) - 1
+        d = d + sqrt( (temp_posmatrix(j+1,1) - temp_posmatrix(j,1) )^2 + ... % dx^2
+            (temp_posmatrix(j+1,2) - temp_posmatrix(j,2) )^2 + ...           % dy^2
+            (temp_posmatrix(j+1,3) - temp_posmatrix(j,3) )^2);             % dz^2
+    end
+    DistanceBtwCup(i) = d;
 end
 
 
@@ -250,6 +264,26 @@ end
 TrialTime = zeros(n_reps,1);
 TrialTime(:) = (idx_endofreach(end) - idx_scoopstart(1)) * dt; % in seconds
 
+%% Calculate velocity profiles during transport and calculate avg
+[v_profiles, t_normed] = TimeNormalization(v_res, idx_startofreach, idx_endoftransport, n_reps);
+
+% Calculate ensemble average of velocity profiles 
+v_avg = mean(v_profiles, 1);
+v_std = std(v_profiles, 1);
+
+
+figure
+plot(t_normed,v_profiles)
+ylabel('velocity')
+xlabel('normalized time (100% cycle)')
+title('velocity profiles after interpolation')
+hold on
+% plot out average velocity profile using downloaded package [boundedline]
+% by kakearney
+% 95% C.I. 
+[hl, hp] = boundedline(t_normed, v_avg, 1.96*v_std, 'alpha');
+set(hl, 'linewidth', 2, 'color','black');
+axis tight;
 %% Organize variables in table form 
 % make sure this is the same format as in the excel sheet
 SubID = strings(n_reps,1);
@@ -263,7 +297,26 @@ Hand(:) = hand;
 Trial(:) = trial;
 Reach = [1:n_reps]';
 
+% vars is used to be copied into excel. % added DistanceBtwCup
 vars = table(SubID, Session, Hand, Trial, TrialTime, ...        % repetetive info
-    Reach, DwellTime, TransportTime, DistanceInCup, PeakVelocity)  % individual reach info
+    Reach, DwellTime, TransportTime, DistanceInCup, PeakVelocity, ...
+    DistanceBtwCup)  % individual reach info
+
 
 length(idx_CupBoudary)
+%% Store processed data
+% position, vel, acceleration and index markers, and DVs.
+% save in cell arrays
+
+outfilename = strcat(filename(1:end-4), '.mat');
+subdata = struct('pos_matrix',pos_matrix,'vel_matrix',vel_matrix,'acc_matrix',acc_matrix, ...
+    'idx_endoftransport',idx_endoftransport, 'idx_peak',idx_peak, ...
+    'idx_scoopstart', idx_scoopstart, 'idx_startofreach',idx_startofreach, ...
+    'TrialTime', TrialTime,'DwellTime', DwellTime, 'TransportTime', TransportTime, ...
+    'DistanceInCup',DistanceInCup, 'PeakVelocity', PeakVelocity, ...
+    'DistanceBtwCup', DistanceBtwCup, ...
+    'v_res', v_res, 'v_profiles', v_profiles, 't_normed', t_normed, ...
+    'v_avg',v_avg, 'v_std', v_std);
+save(outfilename,'subdata')
+
+reminder = 'Remember to save figures too'
